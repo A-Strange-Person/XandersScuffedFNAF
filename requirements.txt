@@ -1,1 +1,2 @@
-# GitPython
+cmu-graphics >=1.1.11, <2
+pyinstaller >=4.8, <5
