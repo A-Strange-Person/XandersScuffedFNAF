@@ -1,680 +1,364 @@
 # This project has been licenced under GPLv3 with permission of the original author.
 
-#       Final Project for Computer Science 1A                                   #
-#       So, basically, I wanted to recreate game AI and challenge myself to     #
-#       learn new things. I picked to learn classes due to their usefullness in #
-#       AI. The specific game I chose to remake in a scuffed format was         #
-#       Five Nights at Freddy's due to the simple(ish) AI and it's fun          #
-
-
-#       A couple key differences here, freddy is no longer affected by cams and #
-#       there is only one cam for the whole map. Power is also more forgiving   #
-#       at lower usage, harsher at higher usage. Attack speeds are also diff.   #
-
-###         Controls                                      Times                 ###
-
-#   A for west door                                 12 AM: 3600
-#   D for east door                                  1 AM: 3000
-#                                                    2 AM: 2400
-#   J for west light                                 3 AM: 1800
-#   L for east light                                 4 AM: 1200
-#                                                    5 AM:  600
-#   C for cameras                                    6 AM:    0
-
-
 import cmu_graphics
 from cmu_graphics import *
-
-###         AI levels                                                           ###
-blueLevel = 0  # 0
-yellowLevel = 5  # 5
-brownLevel = 1  # 1
-redLevel = 2  # 2
-
-#       The way the ai works is that after _ seconds (different for each char.) #
-#       it 'rolls a dice' between 1 and 20, and if the roll is less than or     #
-#       equal to the level, the enemy can move/attack depending on conditions.  #
-
-#       Also, I did add the 1987 easter egg(but bad), and with a changed order. #
-#       So it would be blue(1),yellow(9),brown(8),red(7).                       #
-
-#       The comments next to the levels are just the values for night 3         #
-
-
-### Game Variables
-
-app.stepsPerSecond = 10
-
-powerLevel = Label(1, 350, 40, fill='white', size=20)
-power = Label(100, 50, 40, fill='white', size=20)
-
-power.timer = 0
-power.rate = 80  # frames (seconds * 10 for 1% of power)
-power.level = 1  # Pasive (1 to 5)
-
-power.camsOn = False
-
-timer = Label(3600, 300, 350, fill='white', size=20, align='left')
-
 import random as r
-
-dice = r.randint(1, 1)
-
-### Graphical Objects
-
-main = Rect(200, 200, 200, 150, fill='gray', border='black', borderWidth=6, align='center')
-stage = Rect(main.centerX, main.top + 5, 100, 40, fill='gray', border='black', borderWidth=6, align='bottom')
-back = Rect(main.left - 8, main.top, 40, 60, fill='gray', border='black', borderWidth=6, align='top-right')
-cove = Rect(main.left + 6, main.bottom - 8, 50, 50, fill='gray', border='black', borderWidth=6, align='bottom-right')
-northeast = Rect(main.right + 8, main.bottom, 40, 125, fill='gray', border='black', borderWidth=6, align='bottom-left')
-mens = Rect(northeast.right + 8, northeast.bottom, 40, 40, fill='gray', border='black', borderWidth=6,
-            align='bottom-left')
-womens = Rect(northeast.right + 8, mens.top - 8, 40, 40, fill='gray', border='black', borderWidth=6,
-              align='bottom-left')
-west = Rect(main.centerX - 28, main.bottom + 8, 40, 125, fill='gray', border='black', borderWidth=6, align='top-right')
-east = Rect(main.centerX + 28, main.bottom + 8, 40, 125, fill='gray', border='black', borderWidth=6, align='top-left')
-office = Rect(main.centerX, east.bottom, 40, 40, fill='gray', border='black', borderWidth=6, align='bottom')
-supply = Rect(west.left - 8, west.centerY - 20, 40, 40, fill='gray', border='black', borderWidth=6, align='right')
-kitchen = Rect(east.right + 8, main.bottom + 8, 120, 75, fill='gray', border='black', borderWidth=6, align='top-left')
-
-building = Group(main, stage, back, cove, northeast, mens, womens, west, east, office, supply, kitchen)
-building.centerX = 200
-building.centerY = 200
-
-## Doors ##
-backD = Line(back.right, back.top + 20, main.left, back.top + 20, lineWidth=14, fill='black')
-noEaD = Line(main.right, northeast.top + 20, northeast.left, northeast.top + 20, lineWidth=20, fill='black')
-mensD = Line(northeast.right, mens.centerY, mens.left, mens.centerY, lineWidth=14, fill='black')
-womensD = Line(northeast.right, womens.centerY, womens.left, womens.centerY, lineWidth=14, fill='black')
-kitchenD = Line(main.right - 12, kitchen.top, main.right - 12, main.bottom, lineWidth=14, fill='black')
-wmD = Line(west.centerX, west.top, west.centerX, main.bottom, lineWidth=20, fill='black')
-emD = Line(east.centerX, east.top, east.centerX, main.bottom, lineWidth=20, fill='black')
-supplyD = Line(supply.right, supply.centerY, west.left, supply.centerY, lineWidth=14, fill='black')
-WestDoor = Line(west.right, office.centerY, office.left, office.centerY, lineWidth=14, fill='red')
-EastDoor = Line(east.left, office.centerY, office.right, office.centerY, lineWidth=14, fill='red')
-
-doors = Group(backD, noEaD, mensD, womensD, kitchenD, wmD, emD, supplyD, WestDoor, EastDoor)
-
-cover = Rect(0, 0, 400, 400, fill='black', opacity=50)
-
-EastLight = Polygon(east.left + 6, office.top, east.right - 6, office.top - 4, east.right - 6, office.centerY + 4,
-                    east.left + 6, office.centerY, fill='darkGray', visible=False)
-WestLight = Polygon(west.right - 6, office.top, west.left + 6, office.top - 4, west.left + 6, office.centerY + 4,
-                    west.right - 6, office.centerY, fill='darkGray', visible=False)
-
-### Active variables (altered frequently)
-
-WestDoor.status = False
-WestDoor.light = False
-EastDoor.status = False
-EastDoor.light = False
-
-kitchen.visited = False
-northeast.visited = False
-
-## Enemies ##
-brown = Circle(stage.centerX, stage.centerY, 8, fill='sienna')
-blue = Circle(stage.centerX - 20, stage.centerY, 8, fill='slateBlue')
-yellow = Circle(stage.centerX + 20, stage.centerY, 8, fill='goldenrod')
-red = Circle(cove.centerX - 8, cove.centerY, 8, fill='fireBrick')
-
-enemies = Group(brown, blue, yellow, red)
-enemies.visible = False
+dice = r.randint(1,3)
 
 
-###     Controls and Game Over
 
-def gameOver(screenColor, textColor):
-    Rect(0, 0, 400, 400, fill=screenColor, opacity=100)
-    Label('Game Over!', 200, 200, fill=textColor, size=60)
-    app.stop()
+#####           MENUS
+menu = Rect(0,0,400,400,fill='darkSlateGray')
+menu.menu = 'start'
+menu.gameStarted = False
+menu.active = True
+menu.option = 1
+menu.night = 1
 
+startButton = Label('Start',40,320,size=40,fill='yellow',align='left')
 
-def cams():
-    if power.camsOn == False:
-        cover.opacity = 0
-        enemies.visible = True
-        power.camsOn = True
-        power.level += 1
-        power.timer = 0
-        power.value -= 1
-    else:
-        cover.opacity = 50
-        enemies.visible = False
-        power.camsOn = False
-        power.level -= 1
-        power.timer = 0
-        power.value -= 1
+quitButton = Label('Quit',40,360,size=40,fill='darkGray',align='left')
 
-
-def westDoor():
-    if WestDoor.status == False:
-        WestDoor.fill = 'forestGreen'
-        WestDoor.status = True
-        power.level += 1
-        power.timer = 0
-        power.value -= 1
-    else:
-        WestDoor.fill = 'red'
-        WestDoor.status = False
-        power.level -= 1
-        power.timer = 0
-        power.value -= 1
+startMenu = Group(startButton,quitButton,
+    Label('Five Nights',360,60,size=60,fill='white',align='right'),
+    Label("at Freddy's",360,120,size=60,fill='white',align='right'),
+    Label('Scuffed Edition',360,180,size=30,fill='darkGray',align='right')
+    )
+    
+    
+    
+night1 = Label('Night 1',32,80,size=30,fill='yellow',align='left')
+night2 = Label('Night 2',32,120,size=30,fill='darkGray',align='left')
+night3 = Label('Night 3',32,160,size=30,fill='darkGray',align='left')
+night4 = Label('Night 4',32,200,size=30,fill='darkGray',align='left')
+night5 = Label('Night 5',32,240,size=30,fill='darkGray',align='left')
+night6 = Label('Night 6',32,280,size=30,fill='darkGray',align='left')
+night7 = Label('Night 7',32,320,size=30,fill='darkGray',align='left')
 
 
-def eastDoor():
-    if EastDoor.status == False:
-        EastDoor.fill = 'forestGreen'
-        EastDoor.status = True
-        power.level += 1
-        power.timer = 0
-        power.value -= 1
-    else:
-        EastDoor.fill = 'red'
-        EastDoor.status = False
-        power.level -= 1
-        power.timer = 0
-        power.value -= 1
+menuFreddy = Circle(180,80,25,fill='sienna')
+menuBonnie = Circle(180,160,25,fill='slateBlue')
+menuChica  = Circle(180,240,25,fill='goldenrod')
+menuFoxy   = Circle(180,320,25,fill='fireBrick')
+
+startLevels = Label("Starting levels",260,40,fill='white')
+am4Levels = Label("4AM Levels",340,40,fill='white')
+
+start1 = Label(0,260,80,fill='white',size=40)
+start2 = Label(0,260,160,fill='white',size=40)
+start3 = Label(0,260,240,fill='white',size=40)
+start4 = Label(0,260,320,fill='white',size=40)
+
+am41 = Label(0,340,80,fill='white',size=40)
+am42 = Label(3,340,160,fill='white',size=40)
+am43 = Label(2,340,240,fill='white',size=40)
+am44 = Label(2,340,320,fill='white',size=40)
+
+selectMenu = Group(night1,night2,night3,night4,night5,night6,night7,menuFreddy,menuBonnie,menuChica,menuFoxy,startLevels,am4Levels,
+    start1,start2,start3,start4,am41,am42,am43,am44
+    )
+selectMenu.visible = False
+
+customFreddy = Circle(75,80 ,30,fill='sienna'   ,border='yellow'  ,borderWidth=5)
+customBonnie = Circle(75,160,30,fill='slateBlue',border='darkGray',borderWidth=5)
+customChica  = Circle(75,240,30,fill='goldenrod',border='darkGray',borderWidth=5)
+customFoxy   = Circle(75,320,30,fill='fireBrick',border='darkGray',borderWidth=5)
+
+freddyCustomAI = Label(0,180,80,fill='white',size=40)
+bonnieCustomAI = Label(0,180,160,fill='white',size=40)
+chicaCustomAI = Label(0,180,240,fill='white',size=40)
+foxyCustomAI = Label(0,180,320,fill='white',size=40)
+
+customMenu = Group(customFreddy,customBonnie,customChica,customFoxy,freddyCustomAI,bonnieCustomAI,chicaCustomAI,foxyCustomAI,
+    Label('Press enter',300,260,size=20,fill='white'),
+    Label('to start.',300,280,size=20,fill='white'),
+    )
+customMenu.visible=False
 
 
-def westLight():
-    if WestLight.visible == False:
-        WestLight.visible = True
-        if blueAI.location == 9:
-            blue.visible = True
-        else:
-            blue.visible = False
-        if redAI.location == 9:
-            red.visible = True
-        else:
-            red.visible = False
-        power.level += 1
-        power.timer = 0
-        power.value -= 1
-    else:
-        WestLight.visible = False
-        if blueAI.location == 9:
-            blue.visible = False
-        else:
-            blue.visible = False
-        if redAI.location == 9:
-            red.visible = False
-        else:
-            red.visible = False
-        power.level -= 1
-        power.timer = 0
-        power.value -= 1
 
-
-def eastLight():
-    if EastLight.visible == False:
-        EastLight.visible = True
-        if yellowAI.location == 12:
-            yellow.visible = True
-        else:
-            yellow.visible = False
-        power.level += 1
-        power.timer = 0
-        power.value -= 1
-    else:
-        EastLight.visible = False
-        if yellowAI.location == 12:
-            yellow.visible = False
-        else:
-            yellow.visible = False
-        power.level -= 1
-        power.timer = 0
-        power.value -= 1
-
+#####   Controls
 
 def onKeyPress(key):
-    if key == 'c' and power.value >= 0:
-        cams()
-    if key == 'a' and power.camsOn == False and power.value >= 0:
-        westDoor()
-    if key == 'd' and power.camsOn == False and power.value >= 0:
-        eastDoor()
-    if key == 'j' and power.camsOn == False and power.value >= 0:
-        westLight()
-    if key == 'l' and power.camsOn == False and power.value >= 0:
-        eastLight()
+    
+    
+    
+    
+    #   Tells if a menu is active
+    if menu.active == True:
+        
+        #   Tells if the menu is start
+        if menu.menu == 'start':
+            
+            #   Tells if it's up or down for menu control
+            if key == 'down' and menu.option == 1:
+                startButton.fill='darkGray'
+                quitButton.fill='yellow'
+                menu.option += 1
+                
+            elif key == 'up' and menu.option == 2:
+                startButton.fill ='yellow'
+                quitButton.fill='darkGray'
+                menu.option -= 1
+            
+            #   Tells if it's enter for menu control
+            elif key == 'enter':
+                
+                if menu.option == 1:
+                    startMenu.visible = False
+                    menu.menu = 'select'
+                    menu.option = 1
+                    startButton.fill='yellow'
+                    quitButton.fill='darkGray'
+                    menu.active = True
+                    selectMenu.visible = True
+                    
+                    
+                elif menu.option == 2: app.stop()
+            
+            #   Tells if it's escape for menu control
+            elif key == 'escape': app.stop()
+                
+        #   Tells if the menu is select
+        elif menu.menu == 'select':
+            
+            #   Tells if it's up or down for menu control
+            if menu.option == 1:
+                if key == 'up': 
+                    night1.fill='darkGray'
+                    night7.fill='yellow'
+                    menu.option = 7
+                elif key == 'down':
+                    night1.fill='darkGray'
+                    night2.fill='yellow'
+                    menu.option += 1
+            elif menu.option == 2:
+                if key == 'up': 
+                    night2.fill='darkGray'
+                    night1.fill='yellow'
+                    menu.option -=1
+                elif key == 'down':
+                    night2.fill='darkGray'
+                    night3.fill='yellow'
+                    menu.option += 1        
+            elif menu.option == 3:
+                if key == 'up': 
+                    night3.fill='darkGray'
+                    night2.fill='yellow'
+                    menu.option -=1
+                elif key == 'down':
+                    night3.fill='darkGray'
+                    night4.fill='yellow'
+                    menu.option += 1     
+            elif menu.option == 4:
+                if key == 'up': 
+                    night4.fill='darkGray'
+                    night3.fill='yellow'
+                    menu.option -=1
+                elif key == 'down':
+                    night4.fill='darkGray'
+                    night5.fill='yellow'
+                    menu.option += 1     
+            elif menu.option == 5:
+                if key == 'up': 
+                    night5.fill='darkGray'
+                    night4.fill='yellow'
+                    menu.option -=1
+                elif key == 'down':
+                    night5.fill='darkGray'
+                    night6.fill='yellow'
+                    menu.option += 1     
+            elif menu.option == 6:
+                if key == 'up': 
+                    night6.fill='darkGray'
+                    night5.fill='yellow'
+                    menu.option -=1
+                elif key == 'down':
+                    night6.fill='darkGray'
+                    night7.fill='yellow'
+                    menu.option += 1     
+            elif menu.option == 7:
+                if key == 'up': 
+                    night7.fill='darkGray'
+                    night6.fill='yellow'
+                    menu.option -=1
+                elif key == 'down':
+                    night7.fill='darkGray'
+                    night1.fill='yellow'
+                    menu.option = 1
+            
+            if night1.fill=='yellow':
+                start1.value=0
+                start2.value=0
+                start3.value=0
+                start4.value=0
+                am41.value=0
+                am42.value=3
+                am43.value=2
+                am44.value=2
+                menu.night = 1
+            elif night2.fill=='yellow':
+                start1.value=0
+                start2.value=3
+                start3.value=1
+                start4.value=1
+                am41.value=0
+                am42.value=6
+                am43.value=3
+                am44.value=3
+                menu.night = 2
+            elif night3.fill=='yellow':
+                start1.value=1
+                start2.value=0
+                start3.value=5
+                start4.value=2
+                am41.value=1
+                am42.value=3
+                am43.value=7
+                am44.value=4
+                menu.night = 3
+            elif night4.fill=='yellow':
+                start1.value='?'
+                start2.value=2
+                start3.value=4
+                start4.value=6
+                am41.value='?'
+                am42.value=5
+                am43.value=6
+                am44.value=8                
+                menu.night = 4
+            elif night5.fill=='yellow':
+                start1.value=3
+                start2.value=5
+                start3.value=7
+                start4.value=5
+                am41.value=3
+                am42.value=8
+                am43.value=9
+                am44.value=7
+                menu.night = 5
+            elif night6.fill=='yellow':
+                start1.value=4
+                start2.value=10
+                start3.value=12
+                start4.value=16
+                am41.value=4
+                am42.value=13
+                am43.value=14
+                am44.value=18
+                menu.night = 6
+            elif night7.fill=='yellow':
+                start1.value='?'
+                start2.value='?'
+                start3.value='?'
+                start4.value='?'
+                am41.value='?'
+                am42.value='?'
+                am43.value='?'
+                am44.value='?'                
+                menu.night = 7
+            
+            if key == 'enter' and night7.fill !='yellow' and night4.fill !='yellow':startGame(start1.value,start2.value,start3.value,start4.value)
+            elif key == 'enter' and night4.fill=='yellow':
+                dice = r.randint(1,2)
+                startGame(dice,start2.value,start3.value,start4.value)
+            elif key == 'enter' and night7.fill == 'yellow':
+                selectMenu.visible=False
+                customMenu.visible=True
+                menu.menu = 'custom'
+                menu.option = 1
+                
+            elif key == 'escape':
+                menu.option = 1
+                menu.menu = 'start'
+                selectMenu.visible = False
+                startMenu.visible = True
+        
+        #   Tells if the menu is custom
+        elif menu.menu == 'custom':
+            if menu.option == 1:
+                if key == 'up':
+                    customFreddy.border='darkGray'
+                    customFoxy.border  ='yellow'
+                    menu.option = 4
+                if key == 'down':
+                    customFreddy.border='darkGray'
+                    customBonnie.border='yellow'
+                    menu.option = 2
+            elif menu.option == 2:
+                if key == 'up':
+                    customBonnie.border='darkGray'
+                    customFreddy.border  ='yellow'
+                    menu.option -= 1
+                if key == 'down':
+                    customBonnie.border='darkGray'
+                    customChica.border='yellow'
+                    menu.option+=1
+            elif menu.option == 3:
+                if key == 'up':
+                    customChica.border='darkGray'
+                    customBonnie.border  ='yellow'
+                    menu.option -= 1
+                if key == 'down':
+                    customChica.border='darkGray'
+                    customFoxy.border='yellow'
+                    menu.option+=1
+            elif menu.option == 4:
+                if key == 'up':
+                    customFoxy.border='darkGray'
+                    customChica.border  ='yellow'
+                    menu.option -= 1
+                if key == 'down':
+                    customFoxy.border='darkGray'
+                    customFreddy.border='yellow'
+                    menu.option=1
+            
+            if key == 'left':
+                if menu.option==1 and freddyCustomAI.value > 0:freddyCustomAI.value -= 1
+                if menu.option==2 and bonnieCustomAI.value > 0:bonnieCustomAI.value -= 1
+                if menu.option==3 and chicaCustomAI.value > 0:chicaCustomAI.value -= 1
+                if menu.option==4 and foxyCustomAI.value > 0:foxyCustomAI.value -= 1
+            elif key == 'right':
+                if menu.option==1 and freddyCustomAI.value < 20:freddyCustomAI.value += 1
+                if menu.option==2 and bonnieCustomAI.value < 20:bonnieCustomAI.value += 1
+                if menu.option==3 and chicaCustomAI.value < 20:chicaCustomAI.value += 1
+                if menu.option==4 and foxyCustomAI.value < 20:foxyCustomAI.value += 1
+                
+            elif key == 'enter':startGame(freddyCustomAI.value,bonnieCustomAI.value,chicaCustomAI.value,foxyCustomAI.value)
 
+            elif key == 'escape':
+                menu.option = 1
+                menu.menu = 'select'
+                selectMenu.visible = True
+                customMenu.visible = False
+            
+#####       Rooms, cams, map, etc.
 
-###     AI
-
-class room:
-    stage = 0
-    cove = 1
-    main = 2
-    back = 3
-    bath = 4
-    food = 5
-    supply = 6
-    westN = 7
-    westS = 8
-    westBli = 9
-    eastN = 10
-    eastS = 11
-    eastBli = 12
-    office = 13
-    player = 14
-
+#####       Game Logic and AI
+def startGame(freddyLevel,bonnieLevel,chicaLevel,foxyLevel):
+    startMenu.visible = False
+    selectMenu.visible = False
+    customMenu.visible = False
+    menu.fill = 'gainsboro'
+    
+    freddyAI.level=freddyLevel
+    bonnieAI.level=bonnieLevel
+    chicaAI.level=chicaLevel
+    foxyAI.level=foxyLevel
+    
+    menu.gameStarted = True
 
 class AI:
-    def __init__(self, location, level, timerD):
+    def __init__(self,location,level,timerD):
         self.location = location
         self.level = level
         self.timerD = timerD
-        self.timer = 0
+        self.timer = 0        
+freddyAI = AI(0,0,46)
+bonnieAI = AI(0,0,54)
+chicaAI = AI(0,0,37)
+foxyAI = AI(0,0,60)
 
 
-blueAI = AI(0, blueLevel, 46)
-yellowAI = AI(0, yellowLevel, 54)
-brownAI = AI(0, brownLevel, 37)
-redAI = AI(1, redLevel, 60)
-
-
-def moveBlue():
-    if blueAI.location == 0:  # if blue is at stage
-        dice = r.randint(1, 3)  # roll between 1 and 3
-        if dice == 1:
-            blue.centerX = main.centerX - 10
-            blue.centerY = main.centerY - 10
-            blueAI.location = 2  # go to main
-
-        elif dice == 2:
-            blue.centerX = back.centerX + 5
-            blue.centerY = back.centerY - 5
-            blueAI.location = 3  # go to back
-
-        elif dice == 3:
-            blue.centerX = west.centerX - 5
-            blue.centerY = west.bottom - 15
-            blueAI.location = 8  # go to westS
-    # if blue is at stage
-
-    elif blueAI.location == 2:  # if blue is at main
-        dice = r.randint(1, 2)  # roll between 1 and 2
-        if dice == 1:
-            blue.centerX = back.centerX + 5
-            blue.centerY = back.centerY - 5
-            blueAI.location = 3  # go to back
-
-        elif dice == 2:
-            blue.centerX = west.centerX
-            blue.centerY = west.top + 15
-            blueAI.location = 7  # go to westN
-    # if blue is at main
-
-    elif blueAI.location == 3:  # if blue is at back
-        dice = r.randint(1, 2)  # roll between 1 and 2
-        if dice == 1:
-            blue.centerX = main.centerX - 10
-            blue.centerY = main.centerY - 10
-            blueAI.location = 2  # go to main
-
-        elif dice == 2:
-            blue.centerX = west.centerX
-            blue.centerY = west.top + 15
-            blueAI.location = 7  # go to westN
-        # if blue is at back
-    # if blue is at back
-
-    elif blueAI.location == 7:  # if blue is at westN
-        dice = r.randint(1, 2)  # roll between 1 and 2
-        if dice == 1:
-            blue.centerX = supply.centerX - 10
-            blue.centerY = supply.centerY - 10
-            blueAI.location = 6  # go to supply
-
-        elif dice == 2:
-            blue.centerX = west.centerX - 5
-            blue.centerY = west.bottom - 15
-            blueAI.location = 8  # go to westS
-    # if blue is at westN
-
-    elif blueAI.location == 6:  # if blue is at supply
-        dice = r.randint(1, 2)  # roll between 1 and 2
-        if dice == 1:
-            blue.centerX = west.centerX + 10
-            blue.centerY = office.centerY
-            blueAI.location = 9  # go to westBli
-
-        elif dice == 2:
-            blue.centerX = west.centerX
-            blue.centerY = west.top + 15
-            blueAI.location = 7  # go to westN
-    # if blue is at supply
-
-    elif blueAI.location == 8:  # if blue is at westS
-        dice = r.randint(1, 2)  # roll between 1 and 2
-        if dice == 1:
-            blue.centerX = west.centerX + 10
-            blue.centerY = office.centerY
-            blueAI.location = 9  # go to westBli
-
-        elif dice == 2:
-            blue.centerX = supply.centerX
-            blue.centerY = supply.centerY
-            blueAI.location = 6  # go to supply
-    # if blue is at westS
-
-    elif blueAI.location == 9:  # if blue is at westBli
-        if WestDoor.status == False:  # if door is open
-            blue.centerX = office.left + 15
-            blue.centerY = office.bottom + 15
-            blueAI.location = 13  # go to office
-
-        elif WestDoor.status == True:  # if door is closed
-            blue.centerX = main.centerX - 10
-            blue.centerY = main.centerY - 10
-            blueAI.location = 2  # go to main
-    # if blue is at westBli
-
-    elif blueAI.location == 13:  # if blue is in office and camera is down
-        if power.camsOn == False:  # if camera's are down
-            gameOver('slateBlue', 'fireBrick')  # kill player(blue)
-        else:
-            blueAI.location = 14  # go by player
-    # if blue is in office
-
-    elif blueAI.location == 14:
-        gameOver('slateBlue', 'fireBrick')  # kill player
-    # if blue is in office*2
-
-
-def moveYellow():
-    if yellowAI.location == 0:  # if yellow is at stage
-        yellow.centerX = main.centerX + 20
-        yellow.centerY = main.centerY
-        yellowAI.location = 2  # go to main
-    # if yellow is at stage
-
-    elif yellowAI.location == 2:  # if yellow is at main
-        dice = r.randint(1, 3)
-        if dice == 1:
-            yellow.centerX = northeast.centerX
-            yellow.centerY = northeast.centerY + 20
-            yellowAI.location = 4
-        if dice == 2:
-            yellow.centerX = kitchen.centerX
-            yellow.centerY = kitchen.centerY
-            yellowAI.location = 5
-        if dice == 3:
-            yellow.centerX = east.centerX
-            yellow.centerY = east.top + 40
-            yellowAI.location = 10
-    # if yellow is at main
-
-    elif yellowAI.location == 4:
-        dice = r.randint(1, 2)
-        if dice == 1:
-            yellow.centerX = main.centerX + 20
-            yellow.centerY = main.centerY
-            yellowAI.location = 2
-        elif dice == 2:
-            yellow.centerX = kitchen.centerX
-            yellow.centerY = kitchen.centerY
-            yellowAI.location = 5
-    # if yellow is at bath
-
-    elif yellowAI.location == 5:  # if yellow is at food
-        dice = r.randint(1, 3)
-        if dice == 1:
-            yellow.centerX = main.centerX + 20
-            yellow.centerY = main.centerY
-            yellowAI.location = 2  # go to main
-        if dice == 2:
-            yellow.centerX = northeast.centerX
-            yellow.centerY = northeast.centerY + 20
-            yellowAI.location = 4
-        if dice == 3:
-            yellow.centerX = east.centerX
-            yellow.centerY = east.top + 40
-            yellowAI.location = 10
-    # if yellow is at food
-
-    elif yellowAI.location == 10:  # if yellow is at eastN
-        dice = r.randint(1, 2)
-        if dice == 1:
-            # eastS
-            yellow.centerX = east.centerX + 5
-            yellow.centerY = east.bottom - 15
-            yellowAI.location = 11  # go to eastS
-
-        if dice == 2:
-            # main
-            yellow.centerX = main.centerX + 20
-            yellow.centerY = main.centerY
-            yellowAI.location = 2  # go to main
-    # if yellow is at eastN
-
-    elif yellowAI.location == 11:  # if yellow is at eastS
-        dice = r.randint(1, 2)
-        if dice == 1:
-            yellow.centerX = east.centerX
-            yellow.centerY = east.top + 40
-            yellowAI.location = 10
-        if dice == 2:
-            yellow.centerX = east.centerX - 10
-            yellow.centerY = office.centerY
-            yellowAI.location = 12  # go to eastBli
-    # if yellow is at eastS
-
-    elif yellowAI.location == 12:
-        dice = r.randint(1, 2)
-        if EastDoor.status == False:  # if door is open
-            yellow.centerX = office.right - 15
-            yellow.centerY = office.bottom + 15
-            yellowAI.location = 13  # go to office
-
-        elif EastDoor.status == True:  # if door is closed
-            yellow.centerX = main.centerX + 20
-            yellow.centerY = main.centerY
-            yellowAI.location = 2  # go to main
-    # if yellow is at eastBli
-
-    elif yellowAI.location == 13:
-        if power.camsOn == False:  # if camera's are down
-            gameOver('goldenrod', 'pink')  # kill player(blue)
-        else:
-            blueAI.location = 14  # go by player
-    # if yellow is in office
-
-    elif yellowAI.location == 14:
-        gameOver('goldenrod', 'pink')  # kill player
-    # if yellow is in office*2
-
-
-def moveBrown():
-    if brownAI.location == 0:
-        brown.centerX = main.centerX + 50
-        brown.centerY = main.centerY + 20
-        brownAI.location = 2
-    # if brown is at stage
-
-    elif brownAI.location == 2:
-        dice = r.randint(1, 3)
-        if dice == 1 and kitchen.visited == False:
-            brown.centerX = kitchen.left + 50
-            brown.centerY = kitchen.bottom - 30
-            brownAI.location = 5
-            kitchen.visited = True
-        elif dice == 2 and northeast.visited == False:
-            brown.centerX = womens.centerX
-            brown.centerY = womens.centerY
-            brownAI.location = 4
-            northeast.visited = True
-        elif dice == 3:
-            brown.centerX = east.right - 20
-            brown.centerY = east.top + 20
-            brownAI.location = 10
-    # if brown is at main
-
-    elif brownAI.location == 4:
-        brown.centerX = main.centerX + 50
-        brown.centerY = main.centerY + 20
-        brownAI.location = 2
-    # if brown is at bath
-
-    elif brownAI.location == 5:
-        brown.centerX = main.centerX + 50
-        brown.centerY = main.centerY + 20
-        brownAI.location = 2
-    # if brown is at kitchen
-
-    elif brownAI.location == 10:
-        brown.centerX = east.left + 20
-        brown.centerY = east.bottom - 20
-        brownAI.location = 11
-    # if brown is at eastN
-
-    elif brownAI.location == 11:
-        if EastDoor.status == True:
-            brown.centerX = main.centerX + 50
-            brown.centerY = main.centerY + 20
-            brownAI.location = 2
-            kitchen.visited = False
-            northeast.visited = False
-        else:
-            brownAI.location = 13
-    # if brown is at eastN
-
-    elif brownAI.location == 13:
-        gameOver('sienna', 'tan')
-    # if brown is in office
-
-
-def moveRed():
-    if redAI.location == 1:
-        red.centerX += 8
-        redAI.location = 15
-    elif redAI.location == 15:
-        red.centerX += 8
-        redAI.location = 16
-    elif redAI.location == 16:
-        red.centerX += 8
-        redAI.location = 17
-    elif redAI.location == 17:
-        red.centerX += 8
-        redAI.location = 18
-    elif redAI.location == 18:
-        red.centerX += 8
-        redAI.location = 19
-    elif redAI.location == 19:
-        red.centerX = west.left + 20
-        red.centerY = office.centerY
-        redAI.location == 9
-        if WestDoor.status == False:
-            gameOver('fireBrick', 'tan')
-        else:
-            red.centerX = cove.centerX - 8
-            red.centerY = cove.centerY
-            redAI.location = 1
-
-
-### Frame stuff
-
-def onStep():
-    if power.level == 1:
-        power.rate = 96
-    elif power.level == 2:
-        power.rate = 54
-    elif power.level == 3:
-        power.rate = 48
-    elif power.level == 4:
-        power.rate = 42
-    elif power.level == 5:
-        power.rate = 36
-    elif power.level == 6:
-        power.rate = 30
-
-    power.timer += 1
-    if power.timer == power.rate:
-        power.timer = 0
-        if power.value >= 1: power.value -= 1
-
-    blueAI.timer += 1
-    if blueAI.timer == blueAI.timerD:
-        blueAI.timer = 0
-        dice = r.randint(1, 20)
-        if blueAI.level >= dice: moveBlue()
-
-    yellowAI.timer += 1
-    if yellowAI.timer == yellowAI.timerD:
-        yellowAI.timer = 0
-        dice = r.randint(1, 20)
-        if yellowAI.level >= dice: moveYellow()
-
-    brownAI.timer += 1
-    if brownAI.timer == brownAI.timerD:
-        brownAI.timer = 0
-        dice = r.randint(1, 20)
-        if brownAI.level >= dice: moveBrown()
-
-    redAI.timer += 1
-    if power.camsOn == True: redAI.Timer = 0
-    if redAI.timer == redAI.timerD:
-        redAI.timer = 0
-        dice = r.randint(1, 20)
-        if redAI.level >= dice and power.camsOn == False:
-            moveRed()
-        else:
-            pass
-
-    if blueAI.location == 9 and WestLight.visible == False:
-        blue.visible = False
-    elif power.camsOn == True and blueAI.location != 9:
-        blue.visible = True
-    if redAI.location == 9 and WestLight.visible == False:
-        red.visible = False
-    elif power.camsOn == True and redAI.location != 9:
-        red.visible = True
-    if yellowAI.location == 12 and EastLight.visible == False:
-        yellow.visible = False
-    elif power.camsOn == True and yellowAI.location != 12:
-        yellow.visible = True
-
-    if power.value <= 0:
-        blueAI.level = 0
-        yellowAI.level = 0
-        redAI.level = 0
-        if WestDoor.status == True: westDoor()
-        if EastDoor.status == True: eastDoor()
-        if power.camsOn == True: cams()
-        if WestLight.visible == True: westLight()
-        if EastLight.visible == True: eastLight()
-
-    powerLevel.value = power.level
-
-    timer.value -= 1
-
-    if timer.value == 3000:  # 1 am
-        pass
-    elif timer.value == 2400:  # 2 am
-        blueAI.level += 1
-    elif timer.value == 1800:  # 3 am
-        blueAI.level += 1
-        yellowAI.level += 1
-        redAI.level += 1
-    elif timer.value == 1200:  # 4 am
-        blueAI.level += 1
-        yellowAI.level += 1
-        redAI.level += 1
-    elif timer.value == 600:  # 5 am
-        pass
-    elif timer.value == 0:
-        Rect(0, 0, 400, 400)
-        Label('You Win!', 200, 200, size=60, fill='white')
-        app.stop()
-
-
-### misc.
-
-power.toFront()
-timer.toFront()
-powerLevel.toFront()
-if blueLevel == 1 and yellowLevel == 9 and brownLevel == 8 and redLevel == 7:
-    gameOver('yellow', 'black')
 
 cmu_graphics.run()
